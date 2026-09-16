@@ -9,7 +9,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, ConfigDict, EmailStr
+from sqlalchemy import text
 from sqlalchemy.orm import Session
+
 
 from database import engine, Base, SessionLocal
 from models import User, Ticket
@@ -271,10 +273,19 @@ def home():
 
 @app.get("/health")
 def health_check():
+    db_status = "connected"
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+    except Exception as e:
+        db_status = f"disconnected ({str(e)})"
+
     return {
         "status": "healthy",
-        "database": "connected"
+        "database": db_status
     }
+
 
 
 # -------------------------

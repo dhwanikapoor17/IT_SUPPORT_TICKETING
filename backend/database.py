@@ -11,7 +11,12 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-engine = create_engine(DATABASE_URL) if DATABASE_URL else None
+if not DATABASE_URL:
+    DATABASE_URL = "sqlite:///./it_support_fallback.db"
+
+connect_args = {"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
+
 
 
 SessionLocal = sessionmaker(

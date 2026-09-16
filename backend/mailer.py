@@ -15,20 +15,28 @@ LOG_FILE = Path(__file__).resolve().parent / "email_notifications.log"
 
 def get_smtp_config():
     dotenv_path = Path(__file__).resolve().parent / ".env"
-    load_dotenv(dotenv_path=dotenv_path, override=True)
+    if dotenv_path.is_file():
+        load_dotenv(dotenv_path=dotenv_path, override=True)
 
     raw_password = os.getenv("SMTP_PASSWORD", "").strip()
     clean_password = raw_password.replace(" ", "")
 
+    raw_port = os.getenv("SMTP_PORT", "587")
+    try:
+        port = int(raw_port.strip()) if raw_port and raw_port.strip().isdigit() else 587
+    except Exception:
+        port = 587
+
     return {
         "host": os.getenv("SMTP_HOST", "").strip(),
-        "port": int(os.getenv("SMTP_PORT", "587")),
+        "port": port,
         "user": os.getenv("SMTP_USER", "").strip(),
         "password": clean_password,
         "from_email": os.getenv("SMTP_FROM_EMAIL", "").strip() or os.getenv("SMTP_USER", "").strip() or "support@itsupport.local",
         "from_name": os.getenv("SMTP_FROM_NAME", "IT Support Desk").strip(),
         "use_tls": os.getenv("SMTP_USE_TLS", "true").lower() in ("true", "1", "yes"),
     }
+
 
 
 def record_email_log(to_email: str, subject: str, text_body: str, recipient_type: str = "USER", status: str = "SIMULATED / LOGGED"):
