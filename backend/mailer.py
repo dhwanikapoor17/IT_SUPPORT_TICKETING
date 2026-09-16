@@ -69,8 +69,8 @@ def send_via_https_api(to_email: str, subject: str, html_body: str, text_body: s
     Sends email via HTTPS REST API (port 443) which is never blocked on cloud hosting platforms like Render.
     Supports Resend (RESEND_API_KEY) and Brevo (BREVO_API_KEY).
     """
-    resend_key = os.getenv("RESEND_API_KEY", "").strip()
-    brevo_key = os.getenv("BREVO_API_KEY", "").strip()
+    resend_key = os.getenv("RESEND_API_KEY", "").strip().strip('"').strip("'")
+    brevo_key = os.getenv("BREVO_API_KEY", "").strip().strip('"').strip("'")
 
     if resend_key:
         try:
@@ -93,6 +93,7 @@ def send_via_https_api(to_email: str, subject: str, html_body: str, text_body: s
                 headers={
                     "Authorization": f"Bearer {resend_key}",
                     "Content-Type": "application/json",
+                    "Accept": "application/json",
                     "User-Agent": "IT-Support-Ticketing/1.0"
                 },
                 method="POST"
@@ -123,6 +124,7 @@ def send_via_https_api(to_email: str, subject: str, html_body: str, text_body: s
                 headers={
                     "api-key": brevo_key,
                     "Content-Type": "application/json",
+                    "Accept": "application/json",
                     "User-Agent": "IT-Support-Ticketing/1.0"
                 },
                 method="POST"
@@ -199,14 +201,17 @@ def diagnose_smtp_send(to_email: str) -> dict:
     config = get_smtp_config()
     from_name = config.get("from_name") or "IT Support Desk"
     from_email = config.get("from_email") or "support@itsupport.local"
-    resend_key = os.getenv("RESEND_API_KEY", "").strip()
-    brevo_key = os.getenv("BREVO_API_KEY", "").strip()
+    resend_key = os.getenv("RESEND_API_KEY", "").strip().strip('"').strip("'")
+    brevo_key = os.getenv("BREVO_API_KEY", "").strip().strip('"').strip("'")
 
     diag = {
         "https_providers": {
             "resend_configured": bool(resend_key),
             "resend_key_prefix": resend_key[:6] + "..." if resend_key else None,
             "brevo_configured": bool(brevo_key),
+            "brevo_key_prefix": brevo_key[:12] + "..." if brevo_key else None,
+            "brevo_key_length": len(brevo_key) if brevo_key else 0,
+            "brevo_key_masked": any(c in brevo_key for c in ["•", "*", "…"]) if brevo_key else False,
         },
         "smtp_config": {
             "host": config["host"],
