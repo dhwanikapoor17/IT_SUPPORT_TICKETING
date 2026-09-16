@@ -113,6 +113,16 @@ def startup_event():
     try:
         if not engine:
             return
+
+        # Ensure tickets table has employee_code and computer_number columns
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS employee_code VARCHAR(50)"))
+                conn.execute(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS computer_number VARCHAR(50)"))
+                conn.commit()
+        except Exception as se:
+            print(f"[STARTUP] Column ensure notice: {se}")
+
         db = SessionLocal()
         admin_count = db.query(User).filter(User.role == "admin").count()
         if admin_count == 0:
@@ -237,6 +247,8 @@ class LoginResponse(BaseModel):
 
 class TicketCreate(BaseModel):
     company: str
+    employee_code: str | None = None
+    computer_number: str | None = None
     issue_type: str
     location: str
     issue: str
@@ -251,6 +263,8 @@ class TicketResponse(BaseModel):
     id: int
     user_id: int
     company: str
+    employee_code: str | None = None
+    computer_number: str | None = None
     issue_type: str
     location: str
     issue: str
@@ -259,6 +273,7 @@ class TicketResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
 
 
 # -------------------------
@@ -415,6 +430,8 @@ def create_ticket(
     new_ticket = Ticket(
         user_id=current_user.id,
         company=ticket_data.company,
+        employee_code=ticket_data.employee_code.strip() if ticket_data.employee_code else None,
+        computer_number=ticket_data.computer_number.strip() if ticket_data.computer_number else None,
         issue_type=ticket_data.issue_type,
         location=ticket_data.location,
         issue=ticket_data.issue
@@ -435,8 +452,11 @@ def create_ticket(
         issue_type=new_ticket.issue_type,
         location=new_ticket.location,
         issue=new_ticket.issue,
-        admin_emails=admin_emails
+        admin_emails=admin_emails,
+        employee_code=new_ticket.employee_code,
+        computer_number=new_ticket.computer_number
     )
+
 
     return new_ticket
 

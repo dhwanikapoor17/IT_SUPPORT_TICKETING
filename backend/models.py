@@ -25,6 +25,8 @@ class Ticket(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     company = Column(String(150), nullable=False)
+    employee_code = Column(String(50), nullable=True)
+    computer_number = Column(String(50), nullable=True)
     issue_type = Column(String(100), nullable=False)
     location = Column(String(150), nullable=False)
     issue = Column(Text, nullable=False)

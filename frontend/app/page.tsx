@@ -11,6 +11,8 @@ type Ticket = {
   id: number;
   user_id: number;
   company: string;
+  employee_code?: string | null;
+  computer_number?: string | null;
   issue_type: string;
   location: string;
   issue: string;
@@ -429,6 +431,8 @@ function UserDashboard({
   );
 
   const [company, setCompany] = useState("");
+  const [employeeCode, setEmployeeCode] = useState("");
+  const [computerNumber, setComputerNumber] = useState("");
   const [issueType, setIssueType] = useState("");
   const [location, setLocation] = useState("");
   const [issue, setIssue] = useState("");
@@ -502,6 +506,8 @@ function UserDashboard({
         },
         body: JSON.stringify({
           company: company,
+          employee_code: employeeCode.trim(),
+          computer_number: computerNumber.trim(),
           issue_type: issueType,
           location: location,
           issue: issue,
@@ -519,6 +525,8 @@ function UserDashboard({
       await loadMyTickets();
 
       setCompany("");
+      setEmployeeCode("");
+      setComputerNumber("");
       setIssueType("");
       setLocation("");
       setIssue("");
@@ -608,6 +616,26 @@ function UserDashboard({
                   </div>
 
                   <div>
+                    <label>Employee Code</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. EMP102"
+                      value={employeeCode}
+                      onChange={(event) => setEmployeeCode(event.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label>Your Computer / System No.</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. PC-014 or LAP-09"
+                      value={computerNumber}
+                      onChange={(event) => setComputerNumber(event.target.value)}
+                    />
+                  </div>
+
+                  <div>
                     <label>Issue Type</label>
 
                     <select
@@ -673,6 +701,16 @@ function UserDashboard({
                 <div className="preview-row">
                   <span>Company</span>
                   <strong>{company}</strong>
+                </div>
+
+                <div className="preview-row">
+                  <span>Employee Code</span>
+                  <strong>{employeeCode || "N/A"}</strong>
+                </div>
+
+                <div className="preview-row">
+                  <span>Computer / System No.</span>
+                  <strong>{computerNumber || "N/A"}</strong>
                 </div>
 
                 <div className="preview-row">
@@ -754,6 +792,18 @@ function UserDashboard({
                     <p>
                       <strong>Company:</strong> {ticket.company}
                     </p>
+
+                    {ticket.employee_code && (
+                      <p>
+                        <strong>Employee Code:</strong> {ticket.employee_code}
+                      </p>
+                    )}
+
+                    {ticket.computer_number && (
+                      <p>
+                        <strong>Computer / System No:</strong> {ticket.computer_number}
+                      </p>
+                    )}
 
                     <p>
                       <strong>Location:</strong> {ticket.location}
@@ -1028,6 +1078,18 @@ function AdminDashboard({
                     <p>
                       <strong>Company:</strong> {ticket.company}
                     </p>
+
+                    {ticket.employee_code && (
+                      <p>
+                        <strong>Employee Code:</strong> {ticket.employee_code}
+                      </p>
+                    )}
+
+                    {ticket.computer_number && (
+                      <p>
+                        <strong>Computer / System No:</strong> {ticket.computer_number}
+                      </p>
+                    )}
 
                     <p>
                       <strong>Location:</strong> {ticket.location}

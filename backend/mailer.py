@@ -364,7 +364,9 @@ def send_ticket_created_email(
     company: str,
     issue_type: str,
     location: str,
-    issue: str
+    issue: str,
+    employee_code: str | None = None,
+    computer_number: str | None = None
 ):
     """Notification sent to the User when they submit a new ticket."""
     subject = f"[IT Support Ticket #{ticket_id}] Ticket Created Successfully"
@@ -412,6 +414,14 @@ def send_ticket_created_email(
             <tr>
               <td class="label">Company:</td>
               <td class="value">{company}</td>
+            </tr>
+            <tr>
+              <td class="label">Employee Code:</td>
+              <td class="value">{employee_code or 'N/A'}</td>
+            </tr>
+            <tr>
+              <td class="label">Computer / System No:</td>
+              <td class="value">{computer_number or 'N/A'}</td>
             </tr>
             <tr>
               <td class="label">Issue Type:</td>
@@ -608,7 +618,9 @@ def send_admin_new_ticket_email(
     company: str,
     issue_type: str,
     location: str,
-    issue: str
+    issue: str,
+    employee_code: str | None = None,
+    computer_number: str | None = None
 ):
     """Notification sent to IT Admin when any user submits a new ticket."""
     subject = f"[Admin Alert] New Ticket #{ticket_id} Logged - {company} ({issue_type})"
@@ -659,6 +671,14 @@ def send_admin_new_ticket_email(
             <tr>
               <td class="label">Company:</td>
               <td class="value">{company}</td>
+            </tr>
+            <tr>
+              <td class="label">Employee Code:</td>
+              <td class="value"><strong>{employee_code or 'N/A'}</strong></td>
+            </tr>
+            <tr>
+              <td class="label">Computer / Asset No:</td>
+              <td class="value"><strong>{computer_number or 'N/A'}</strong></td>
             </tr>
             <tr>
               <td class="label">Issue Type:</td>
@@ -841,7 +861,9 @@ def notify_ticket_created(
     issue_type: str,
     location: str,
     issue: str,
-    admin_emails: list[str]
+    admin_emails: list[str],
+    employee_code: str | None = None,
+    computer_number: str | None = None
 ):
     """Sends confirmation to user AND action alert to all admins."""
     send_ticket_created_email(
@@ -851,7 +873,9 @@ def notify_ticket_created(
         company=company,
         issue_type=issue_type,
         location=location,
-        issue=issue
+        issue=issue,
+        employee_code=employee_code,
+        computer_number=computer_number
     )
 
     for admin_email in admin_emails:
@@ -864,8 +888,11 @@ def notify_ticket_created(
                 company=company,
                 issue_type=issue_type,
                 location=location,
-                issue=issue
+                issue=issue,
+                employee_code=employee_code,
+                computer_number=computer_number
             )
+
 
 
 def notify_ticket_status_change(
