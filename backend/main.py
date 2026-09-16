@@ -287,6 +287,13 @@ def health_check():
     }
 
 
+@app.get("/debug/smtp-test")
+def debug_smtp_test(to_email: str = "dhwani.kapoor04@gmail.com"):
+    from mailer import diagnose_smtp_send
+    return diagnose_smtp_send(to_email)
+
+
+
 
 # -------------------------
 # Authentication APIs

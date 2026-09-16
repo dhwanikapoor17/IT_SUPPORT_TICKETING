@@ -102,6 +102,65 @@ def send_email(to_email: str, subject: str, html_body: str, text_body: str, reci
         return False
 
 
+def diagnose_smtp_send(to_email: str) -> dict:
+    config = get_smtp_config()
+    diag = {
+        "host": config["host"],
+        "port": config["port"],
+        "user": config["user"],
+        "password_configured": bool(config["password"]),
+        "password_length": len(config["password"]) if config["password"] else 0,
+        "use_tls": config["use_tls"],
+        "from_email": config["from_email"],
+        "to_email": to_email,
+        "stage": "init",
+        "success": False,
+        "error": None
+    }
+
+    if not config["host"]:
+        diag["error"] = "SMTP_HOST environment variable is not configured or empty"
+        return diag
+    if not config["user"]:
+        diag["error"] = "SMTP_USER environment variable is not configured or empty"
+        return diag
+    if not config["password"]:
+        diag["error"] = "SMTP_PASSWORD environment variable is not configured or empty"
+        return diag
+
+    try:
+        diag["stage"] = "connecting"
+        if config["port"] == 465:
+            server = smtplib.SMTP_SSL(config["host"], config["port"], timeout=15)
+        else:
+            server = smtplib.SMTP(config["host"], config["port"], timeout=15)
+            if config["use_tls"]:
+                diag["stage"] = "starttls"
+                server.starttls()
+
+        diag["stage"] = "authenticating"
+        server.login(config["user"], config["password"])
+
+        diag["stage"] = "sending"
+        msg = MIMEText("This is a live diagnostic test email from your IT Support Ticketing deployment on Render.", "plain")
+        msg["Subject"] = "[IT Support Test] SMTP Diagnostic Check"
+        msg["From"] = f"{config['from_name']} <{config['from_email']}>"
+        msg["To"] = to_email
+
+        server.send_message(msg)
+        server.quit()
+
+        diag["stage"] = "complete"
+        diag["success"] = True
+        diag["message"] = f"Test email successfully sent to {to_email}"
+        return diag
+
+    except Exception as e:
+        diag["error"] = f"{type(e).__name__}: {str(e)}"
+        return diag
+
+
+
 def get_status_color(status: str) -> str:
     status_lower = status.lower()
     if "open" in status_lower:
