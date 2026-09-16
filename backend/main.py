@@ -9,8 +9,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, ConfigDict, EmailStr
-from sqlalchemy import text
+from sqlalchemy import text, func
 from sqlalchemy.orm import Session
+
 
 
 from database import engine, Base, SessionLocal
@@ -305,9 +306,12 @@ def signup(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
+    clean_email = signup_data.email.strip().lower()
+    clean_name = signup_data.name.strip()
+
     existing_user = (
         db.query(User)
-        .filter(User.email == signup_data.email)
+        .filter(func.lower(User.email) == clean_email)
         .first()
     )
 
@@ -318,8 +322,8 @@ def signup(
         )
 
     new_user = User(
-        name=signup_data.name,
-        email=signup_data.email,
+        name=clean_name,
+        email=clean_email,
         password_hash=hash_password(signup_data.password),
         role="user"
     )
@@ -327,6 +331,7 @@ def signup(
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+    print(f"[AUTH] New user registered successfully: id={new_user.id}, email={new_user.email}")
 
     # Trigger welcome email to the newly registered employee
     background_tasks.add_task(
@@ -342,11 +347,14 @@ def login(
     login_data: LoginRequest,
     db: Session = Depends(get_db)
 ):
+    clean_email = login_data.email.strip().lower()
+
     user = db.query(User).filter(
-        User.email == login_data.email
+        func.lower(User.email) == clean_email
     ).first()
 
     if not user:
+        print(f"[AUTH] Login failed - email not found: {clean_email}")
         raise HTTPException(
             status_code=401,
             detail="Invalid email or password"
@@ -356,11 +364,13 @@ def login(
         login_data.password,
         user.password_hash
     ):
+        print(f"[AUTH] Login failed - invalid password for: {clean_email}")
         raise HTTPException(
             status_code=401,
             detail="Invalid email or password"
         )
 
+    print(f"[AUTH] User logged in: id={user.id}, email={user.email}, role={user.role}")
     access_token = create_access_token(
         data={
             "sub": str(user.id),
@@ -372,6 +382,7 @@ def login(
         "access_token": access_token,
         "token_type": "bearer"
     }
+
 
 @app.get("/auth/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
