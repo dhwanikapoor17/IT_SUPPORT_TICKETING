@@ -42,13 +42,12 @@ class LoginRequest(BaseModel):
     password: str
 
 
-Base.metadata.create_all(bind=engine)
 load_dotenv()
 
-SECRET_KEY = os.getenv("SECRET_KEY")
+if engine:
+    Base.metadata.create_all(bind=engine)
 
-if not SECRET_KEY:
-    raise RuntimeError("SECRET_KEY is missing in .env")
+SECRET_KEY = os.getenv("SECRET_KEY", "default-render-fallback-secret-key-32bytes")
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
@@ -58,14 +57,22 @@ app = FastAPI(
     version="1.0.0"
 )
 
+cors_origins_env = os.getenv("CORS_ORIGINS", "*")
+if cors_origins_env and cors_origins_env != "*":
+    allowed_origins = [o.strip() for o in cors_origins_env.split(",") if o.strip()]
+    allow_credentials = True
+else:
+    allowed_origins = ["*"]
+    allow_credentials = False
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
+    allow_origins=allowed_origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -96,6 +103,34 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, password_hash: str) -> bool:
     return pwd_context.verify(password, password_hash)
+
+
+@app.on_event("startup")
+def startup_event():
+    try:
+        if not engine:
+            return
+        db = SessionLocal()
+        admin_count = db.query(User).filter(User.role == "admin").count()
+        if admin_count == 0:
+            default_accounts = [
+                User(name="Dhwani Kapoor (IT Admin)", email="dhwani.kapoor04@gmail.com", password_hash=hash_password("admin123"), role="admin"),
+                User(name="Admin Backup", email="admin@test.com", password_hash=hash_password("admin123"), role="admin"),
+                User(name="Dhwani (Demo User)", email="dhwani@test.com", password_hash=hash_password("password123"), role="user"),
+            ]
+            for account in default_accounts:
+                if not db.query(User).filter(User.email == account.email).first():
+                    db.add(account)
+            db.commit()
+            print("Successfully initialized default admin and demo user accounts.")
+    except Exception as e:
+        print(f"Startup user seeding status: {e}")
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+
 
 
 def create_access_token(
