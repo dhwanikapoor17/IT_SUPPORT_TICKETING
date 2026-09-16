@@ -1,11 +1,16 @@
 import os
+import json
 import smtplib
+import ssl
+import urllib.error
+import urllib.request
 import logging
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 from dotenv import load_dotenv
+
 
 logger = logging.getLogger("it_support_mailer")
 logging.basicConfig(level=logging.INFO)
@@ -59,17 +64,105 @@ def record_email_log(to_email: str, subject: str, text_body: str, recipient_type
         logger.error(f"Failed to write to email log file: {e}")
 
 
+def send_via_https_api(to_email: str, subject: str, html_body: str, text_body: str, from_name: str, from_email: str) -> tuple[bool, str]:
+    """
+    Sends email via HTTPS REST API (port 443) which is never blocked on cloud hosting platforms like Render.
+    Supports Resend (RESEND_API_KEY) and Brevo (BREVO_API_KEY).
+    """
+    resend_key = os.getenv("RESEND_API_KEY", "").strip()
+    brevo_key = os.getenv("BREVO_API_KEY", "").strip()
+
+    if resend_key:
+        try:
+            url = "https://api.resend.com/emails"
+            # Resend default free testing sender is onboarding@resend.dev unless custom verified
+            sender = os.getenv("RESEND_FROM_EMAIL", "").strip()
+            if not sender:
+                sender = f"{from_name} <onboarding@resend.dev>"
+
+            payload = {
+                "from": sender,
+                "to": [to_email],
+                "subject": subject,
+                "html": html_body,
+                "text": text_body
+            }
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {resend_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "IT-Support-Ticketing/1.0"
+                },
+                method="POST"
+            )
+            ctx = ssl.create_default_context()
+            with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
+                resp_text = resp.read().decode("utf-8")
+                return True, f"Delivered via Resend HTTPS API ({resp_text})"
+        except urllib.error.HTTPError as he:
+            err_body = he.read().decode("utf-8", errors="ignore")
+            return False, f"Resend API error {he.code}: {err_body}"
+        except Exception as e:
+            return False, f"Resend API exception: {e}"
+
+    if brevo_key:
+        try:
+            url = "https://api.brevo.com/v3/smtp/email"
+            payload = {
+                "sender": {"name": from_name, "email": from_email},
+                "to": [{"email": to_email}],
+                "subject": subject,
+                "htmlContent": html_body,
+                "textContent": text_body
+            }
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "api-key": brevo_key,
+                    "Content-Type": "application/json",
+                    "User-Agent": "IT-Support-Ticketing/1.0"
+                },
+                method="POST"
+            )
+            ctx = ssl.create_default_context()
+            with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
+                resp_text = resp.read().decode("utf-8")
+                return True, f"Delivered via Brevo HTTPS API ({resp_text})"
+        except urllib.error.HTTPError as he:
+            err_body = he.read().decode("utf-8", errors="ignore")
+            return False, f"Brevo API error {he.code}: {err_body}"
+        except Exception as e:
+            return False, f"Brevo API exception: {e}"
+
+    return False, "No HTTPS API key configured"
+
+
 def send_email(to_email: str, subject: str, html_body: str, text_body: str, recipient_type: str = "USER") -> bool:
     """
-    Sends an email using configured SMTP credentials.
-    If SMTP credentials are not configured or connection fails, records email to local log.
+    Sends an email using HTTPS API (preferred on cloud environments like Render) or SMTP.
+    If credentials fail or are missing, records email to local log.
     """
     config = get_smtp_config()
+    from_name = config.get("from_name") or "IT Support Desk"
+    from_email = config.get("from_email") or "support@itsupport.local"
 
-    # Check if SMTP is configured
+    # 1. Primary for Cloud: Try HTTPS email delivery (Resend / Brevo)
+    if os.getenv("RESEND_API_KEY") or os.getenv("BREVO_API_KEY"):
+        ok, msg = send_via_https_api(to_email, subject, html_body, text_body, from_name, from_email)
+        if ok:
+            logger.info(f"[EMAIL NOTIFICATION - {recipient_type}] {msg}")
+            record_email_log(to_email, subject, text_body, recipient_type=recipient_type, status="DELIVERED VIA HTTPS API")
+            return True
+        else:
+            logger.warning(f"[EMAIL NOTIFICATION - {recipient_type}] HTTPS API delivery issue: {msg}. Trying SMTP fallback...")
+
+    # 2. Fallback: SMTP delivery
     if not config["host"] or not config["user"] or not config["password"]:
-        logger.info(f"[EMAIL NOTIFICATION - {recipient_type}] SMTP credentials not set. Logging email to {LOG_FILE.name}")
-        record_email_log(to_email, subject, text_body, recipient_type=recipient_type, status="SIMULATED (SMTP credentials not configured in .env)")
+        logger.info(f"[EMAIL NOTIFICATION - {recipient_type}] Neither HTTPS API nor SMTP configured. Logging email to {LOG_FILE.name}")
+        record_email_log(to_email, subject, text_body, recipient_type=recipient_type, status="SIMULATED (No email credentials configured)")
         return True
 
     msg = MIMEMultipart("alternative")
@@ -104,20 +197,50 @@ def send_email(to_email: str, subject: str, html_body: str, text_body: str, reci
 
 def diagnose_smtp_send(to_email: str) -> dict:
     config = get_smtp_config()
+    from_name = config.get("from_name") or "IT Support Desk"
+    from_email = config.get("from_email") or "support@itsupport.local"
+    resend_key = os.getenv("RESEND_API_KEY", "").strip()
+    brevo_key = os.getenv("BREVO_API_KEY", "").strip()
+
     diag = {
-        "host": config["host"],
-        "port": config["port"],
-        "user": config["user"],
-        "password_configured": bool(config["password"]),
-        "password_length": len(config["password"]) if config["password"] else 0,
-        "use_tls": config["use_tls"],
-        "from_email": config["from_email"],
+        "https_providers": {
+            "resend_configured": bool(resend_key),
+            "resend_key_prefix": resend_key[:6] + "..." if resend_key else None,
+            "brevo_configured": bool(brevo_key),
+        },
+        "smtp_config": {
+            "host": config["host"],
+            "port": config["port"],
+            "user": config["user"],
+            "password_configured": bool(config["password"]),
+            "use_tls": config["use_tls"],
+        },
         "to_email": to_email,
-        "stage": "init",
         "success": False,
+        "mode": "none",
         "error": None
     }
 
+    # 1. Test HTTPS if configured
+    if resend_key or brevo_key:
+        diag["mode"] = "HTTPS_API"
+        ok, msg = send_via_https_api(
+            to_email=to_email,
+            subject="[Diagnostic] IT Support Test Email",
+            html_body="<p>This is a test notification from your IT Support Ticketing deployment on Render via HTTPS API.</p>",
+            text_body="This is a test notification from your IT Support Ticketing deployment on Render via HTTPS API.",
+            from_name=from_name,
+            from_email=from_email
+        )
+        diag["success"] = ok
+        if ok:
+            diag["message"] = msg
+        else:
+            diag["error"] = msg
+        return diag
+
+    # 2. Test SMTP
+    diag["mode"] = "SMTP"
     if not config["host"]:
         diag["error"] = "SMTP_HOST environment variable is not configured or empty"
         return diag
@@ -129,19 +252,15 @@ def diagnose_smtp_send(to_email: str) -> dict:
         return diag
 
     try:
-        diag["stage"] = "connecting"
         if config["port"] == 465:
             server = smtplib.SMTP_SSL(config["host"], config["port"], timeout=15)
         else:
             server = smtplib.SMTP(config["host"], config["port"], timeout=15)
             if config["use_tls"]:
-                diag["stage"] = "starttls"
                 server.starttls()
 
-        diag["stage"] = "authenticating"
         server.login(config["user"], config["password"])
 
-        diag["stage"] = "sending"
         msg = MIMEText("This is a live diagnostic test email from your IT Support Ticketing deployment on Render.", "plain")
         msg["Subject"] = "[IT Support Test] SMTP Diagnostic Check"
         msg["From"] = f"{config['from_name']} <{config['from_email']}>"
@@ -150,7 +269,6 @@ def diagnose_smtp_send(to_email: str) -> dict:
         server.send_message(msg)
         server.quit()
 
-        diag["stage"] = "complete"
         diag["success"] = True
         diag["message"] = f"Test email successfully sent to {to_email}"
         return diag
@@ -158,6 +276,7 @@ def diagnose_smtp_send(to_email: str) -> dict:
     except Exception as e:
         diag["error"] = f"{type(e).__name__}: {str(e)}"
         return diag
+
 
 
 
